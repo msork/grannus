@@ -22,7 +22,7 @@ run concurrently with bounded queues, metrics, fault injection, and soak tests.
 
 ## M1 — Linux capture and local media baseline
 
-- [ ] Inventory V4L2/media capture cards and capability negotiation.
+- [x] Inventory V4L2/media capture cards and capability negotiation.
 - [ ] Implement V4L2 UVC backend using memory-mapped buffers.
 - [ ] Preserve device timestamps and detect discontinuities.
 - [ ] Add 48 kHz stereo capture backend and A/V timestamp correlation.
