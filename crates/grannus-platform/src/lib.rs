@@ -43,6 +43,29 @@ pub struct V4l2Capabilities {
     pub formats: Vec<PixelFormat>,
 }
 
+/// Configuration for a bounded V4L2 mmap capture session.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct V4l2MmapConfig {
+    pub format: VideoFormat,
+    pub buffer_count: NonZeroUsize,
+}
+
+impl V4l2MmapConfig {
+    /// Validates negotiated format and bounds before any device allocation.
+    ///
+    /// # Errors
+    /// Returns [`BackendError::InvalidConfiguration`] for invalid formats or
+    /// more than eight mmap buffers.
+    pub fn validate(self) -> Result<Self, BackendError> {
+        self.format.validate()?;
+        if self.buffer_count.get() > 8 {
+            return Err(BackendError::InvalidConfiguration);
+        }
+        Ok(self)
+    }
+}
+
 impl V4l2Capabilities {
     /// Selects a requested format only when the device advertises it.
     ///
@@ -470,5 +493,22 @@ mod tests {
             formats: vec![PixelFormat::Yuyv, PixelFormat::Nv12],
         };
         assert_eq!(capabilities.negotiate(nv12), Ok(nv12));
+    }
+
+    #[test]
+    fn v4l2_mmap_configuration_is_bounded() {
+        let config = V4l2MmapConfig {
+            format: format(),
+            buffer_count: NonZeroUsize::new(4).unwrap(),
+        };
+        assert_eq!(config.validate(), Ok(config));
+        let oversized = V4l2MmapConfig {
+            buffer_count: NonZeroUsize::new(9).unwrap(),
+            ..config
+        };
+        assert_eq!(
+            oversized.validate(),
+            Err(BackendError::InvalidConfiguration)
+        );
     }
 }
