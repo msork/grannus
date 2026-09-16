@@ -3,11 +3,13 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod signal;
 
 use config::Config;
 use grannus_core::{
-    Button, Buttons, ClientIdentity, ControllerState, MetricEvent, MetricEventBuffer, MetricStage,
-    MonoClock, PlayerSlot, SequenceDecision, SequenceWindow, SlotManager, TraceId,
+    Button, Buttons, ClientIdentity, ControllerState, Lifecycle, LifecycleState, MetricEvent,
+    MetricEventBuffer, MetricStage, MonoClock, PlayerSlot, SequenceDecision, SequenceWindow,
+    SlotManager, TraceId,
 };
 use grannus_platform::{
     CaptureBackend, ControllerBackend, FakeCapture, FakeController, PixelFormat, VideoFormat,
@@ -37,7 +39,7 @@ fn run(mut arguments: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>
         }
         Some("fake-session") => {
             load_config(arguments)?;
-            fake_session()
+            fake_session(&signal::SignalShutdown::install()?)
         }
         Some("help" | "--help" | "-h") | None => {
             print_help();
@@ -73,7 +75,8 @@ fn doctor(config: &Config) {
     println!("status=foundation-only");
 }
 
-fn fake_session() -> Result<(), Box<dyn Error>> {
+fn fake_session(shutdown: &signal::SignalShutdown) -> Result<(), Box<dyn Error>> {
+    let mut lifecycle = Lifecycle::new();
     let clock = MonoClock::new();
     let mut metric_events = MetricEventBuffer::new(NonZeroUsize::new(16).unwrap());
     let format = VideoFormat {
@@ -84,14 +87,36 @@ fn fake_session() -> Result<(), Box<dyn Error>> {
         pixel_format: PixelFormat::Yuyv,
     };
     let mut capture = FakeCapture::new(format, 3)?;
+    let mut controller = FakeController::default();
     let mut frame_count = 0_u64;
-    while let Ok(frame) = capture.next_frame() {
+    while !shutdown.requested() {
+        let frame = match capture.next_frame() {
+            Ok(frame) => frame,
+            Err(grannus_platform::BackendError::EndOfStream) => break,
+            Err(error) => {
+                lifecycle.request_shutdown();
+                controller.neutralize()?;
+                lifecycle.complete_shutdown();
+                return Err(error.into());
+            }
+        };
         metric_events.record(MetricEvent::new(
             frame.trace_id,
             MetricStage::CaptureArrival,
             frame.captured_at,
         ));
         frame_count += 1;
+    }
+
+    if shutdown.requested() {
+        lifecycle.request_shutdown();
+        controller.neutralize()?;
+        lifecycle.complete_shutdown();
+        println!("fake_session_frames={frame_count}");
+        println!("fake_controller_reports={}", controller.reports());
+        println!("final_state_neutral=true");
+        println!("status=shutdown");
+        return Ok(());
     }
 
     let state = ControllerState {
@@ -119,14 +144,20 @@ fn fake_session() -> Result<(), Box<dyn Error>> {
         MetricStage::InputAccepted,
         clock.now(),
     ));
-    let mut controller = FakeController::default();
-    controller.send_state(decoded.state)?;
+    if let Err(error) = controller.send_state(decoded.state) {
+        lifecycle.request_shutdown();
+        controller.neutralize()?;
+        lifecycle.complete_shutdown();
+        return Err(error.into());
+    }
     metric_events.record(MetricEvent::new(
         input_trace,
         MetricStage::ControllerReport,
         clock.now(),
     ));
+    lifecycle.request_shutdown();
     controller.neutralize()?;
+    lifecycle.complete_shutdown();
     metric_events.record(MetricEvent::new(
         input_trace,
         MetricStage::ControllerReport,
@@ -144,6 +175,7 @@ fn fake_session() -> Result<(), Box<dyn Error>> {
         controller.latest() == Some(ControllerState::default())
     );
     println!("status=ok");
+    debug_assert_eq!(lifecycle.state(), LifecycleState::Stopped);
     Ok(())
 }
 
@@ -181,5 +213,21 @@ mod tests {
     #[test]
     fn configuration_flag_requires_a_path() {
         assert!(run(["doctor".to_owned(), "--config".to_owned()].into_iter()).is_err());
+    }
+
+    #[test]
+    fn fault_cleanup_neutralizes_controller_before_stopping() {
+        let mut lifecycle = Lifecycle::new();
+        let mut controller = FakeController::default();
+        controller.fail_next_send();
+        let error = controller
+            .send_state(ControllerState::default())
+            .unwrap_err();
+        lifecycle.request_shutdown();
+        controller.neutralize().unwrap();
+        lifecycle.complete_shutdown();
+        assert_eq!(error, grannus_platform::BackendError::DeviceIo);
+        assert_eq!(controller.latest(), Some(ControllerState::default()));
+        assert_eq!(lifecycle.state(), LifecycleState::Stopped);
     }
 }

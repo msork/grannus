@@ -11,3 +11,7 @@
 config/local.toml
 artifacts/
 coverage/
+fuzz/artifacts/
+fuzz/corpus/
+fuzz/coverage/
+fuzz/target/

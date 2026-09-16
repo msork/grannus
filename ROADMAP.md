@@ -14,8 +14,8 @@ hardware evidence; simulation alone cannot complete them.
 - [x] Add monotonic stage timestamps, histogram-ready metric events, and trace IDs.
 - [x] Add slot lease/ownership state machine with reconnect/conflict tests.
 - [x] Add stale/duplicate/wrapping sequence-window property tests.
-- [ ] Add fuzz targets for every untrusted decoder.
-- [ ] Add graceful lifecycle and signal-driven shutdown.
+- [x] Add fuzz targets for every untrusted decoder.
+- [x] Add graceful lifecycle and signal-driven shutdown.
 
 Exit: fake capture -> fake encode/transport and synthetic input -> fake controller
 run concurrently with bounded queues, metrics, fault injection, and soak tests.

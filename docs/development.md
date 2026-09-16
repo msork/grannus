@@ -52,3 +52,14 @@ crate is used on media or input hot paths.
 as a test-only dependency for generated sequence-ordering properties. It is
 passively maintained by its upstream project, licensed MIT or Apache-2.0, and
 declares Rust 1.85 support. It has no production runtime or platform impact.
+
+`fuzz/` is an isolated `cargo-fuzz` 0.13.2 workspace for untrusted parser
+targets. `cargo-fuzz` is actively maintained by the Rust Fuzzing Authority and
+dual-licensed MIT or Apache-2.0. It uses `libfuzzer-sys` 0.4.13, whose Rust
+wrapper is MIT or Apache-2.0 and whose vendored libFuzzer runtime is NCSA
+licensed. The toolchain requires Linux, a C++ compiler, and Rust nightly; none
+of these dependencies are shipped in the production workspace.
+
+`grannus-host` uses [`signal-hook` 0.3.18](https://docs.rs/signal-hook/0.3.18/)
+for safe Unix SIGINT/SIGTERM flags. It is dual-licensed Apache-2.0 or MIT and
+is restricted to the host crate; core and platform remain signal-agnostic.

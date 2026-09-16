@@ -14,5 +14,8 @@ grannus-protocol = { path = "../grannus-protocol" }
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.6"
 
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.3.18"
+
 [lints]
 workspace = true

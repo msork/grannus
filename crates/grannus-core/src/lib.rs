@@ -7,6 +7,56 @@ use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 
+/// Platform-neutral lifecycle phases for bounded shutdown.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LifecycleState {
+    /// Work is being accepted.
+    Running,
+    /// Shutdown was requested and cleanup is in progress.
+    StopRequested,
+    /// Cleanup completed.
+    Stopped,
+}
+
+/// Small state machine that makes shutdown transitions explicit and idempotent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Lifecycle {
+    state: LifecycleState,
+}
+
+impl Lifecycle {
+    #[must_use]
+    /// Starts in the running state.
+    pub const fn new() -> Self {
+        Self {
+            state: LifecycleState::Running,
+        }
+    }
+    #[must_use]
+    /// Returns the current lifecycle phase.
+    pub const fn state(self) -> LifecycleState {
+        self.state
+    }
+    /// Requests shutdown; repeated requests are harmless.
+    pub fn request_shutdown(&mut self) {
+        if matches!(self.state, LifecycleState::Running) {
+            self.state = LifecycleState::StopRequested;
+        }
+    }
+    /// Marks shutdown complete after resources have been neutralized.
+    pub fn complete_shutdown(&mut self) {
+        if matches!(self.state, LifecycleState::StopRequested) {
+            self.state = LifecycleState::Stopped;
+        }
+    }
+}
+
+impl Default for Lifecycle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Monotonic timestamp relative to a process-local epoch.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct MonoTime(Duration);
@@ -896,6 +946,18 @@ mod tests {
         window.reset();
         assert_eq!(window.latest(), None);
         assert_eq!(window.observe(99), SequenceDecision::Accepted);
+    }
+
+    #[test]
+    fn lifecycle_shutdown_is_idempotent_and_ordered() {
+        let mut lifecycle = Lifecycle::new();
+        assert_eq!(lifecycle.state(), LifecycleState::Running);
+        lifecycle.request_shutdown();
+        lifecycle.request_shutdown();
+        assert_eq!(lifecycle.state(), LifecycleState::StopRequested);
+        lifecycle.complete_shutdown();
+        lifecycle.complete_shutdown();
+        assert_eq!(lifecycle.state(), LifecycleState::Stopped);
     }
 
     proptest! {
