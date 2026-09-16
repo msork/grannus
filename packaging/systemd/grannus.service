@@ -1,0 +1,26 @@
+[Unit]
+Description=Grannus remote-play host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/grannus-host serve --config /etc/grannus/grannus.toml
+User=grannus
+Group=grannus
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/grannus
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,45 @@
+name: Bug report
+description: Reproducible Grannus defect
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Include the smallest reproducible sequence.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit, OS/kernel, CPU/GPU/driver, capture card, Bluetooth adapter and firmware, network, Sirona version.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Logs, traces, metrics, or captures with secrets and personal data removed.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed pairing secrets, private keys, personal addresses, ROMs, firmware, and copyrighted keys.
+          required: true
+        - label: This is not a security vulnerability requiring private disclosure.
+          required: true

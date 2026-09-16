@@ -1,0 +1,17 @@
+/target/
+**/*.rs.bk
+.idea/
+.vscode/
+.DS_Store
+*.log
+*.pcap
+*.pcapng
+*.key
+*.pem
+config/local.toml
+artifacts/
+coverage/
+fuzz/artifacts/
+fuzz/corpus/
+fuzz/coverage/
+fuzz/target/
