@@ -1,0 +1,24 @@
+[workspace]
+members = [
+    "crates/grannus-core",
+    "crates/grannus-host",
+    "crates/grannus-platform",
+    "crates/grannus-protocol",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/msork/grannus"
+rust-version = "1.85"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
