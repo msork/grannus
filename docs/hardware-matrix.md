@@ -7,7 +7,7 @@ link the sanitized evidence. Passing CI is not hardware evidence.
 
 | Device/firmware | Host/kernel | Mode | Backend/buffer path | Result | Timing evidence | Truth label |
 | --- | --- | --- | --- | --- | --- | --- |
-| _none tested_ | | | | | | Unproven |
+| Elgato Game Capture Neo (uvcvideo) | Linux kernel 7.2.5 | 1920x1080 YUYV/NV12 at 60 fps advertised | UVC streaming (mmap path not yet implemented) | Capability query only | `v4l2-ctl --all` and `--list-formats-ext`; no latency sample | Proven capability advertisement; capture path unverified |
 
 ## Encode
 

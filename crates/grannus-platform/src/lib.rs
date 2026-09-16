@@ -461,5 +461,14 @@ mod tests {
             formats: vec![PixelFormat::Yuyv],
         };
         assert_eq!(capabilities.negotiate(requested), Ok(requested));
+        let nv12 = VideoFormat {
+            pixel_format: PixelFormat::Nv12,
+            ..requested
+        };
+        let capabilities = V4l2Capabilities {
+            streaming: true,
+            formats: vec![PixelFormat::Yuyv, PixelFormat::Nv12],
+        };
+        assert_eq!(capabilities.negotiate(nv12), Ok(nv12));
     }
 }
