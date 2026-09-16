@@ -82,6 +82,23 @@ impl V4l2Capabilities {
 }
 
 impl VideoFormat {
+    /// Computes the maximum payload bytes for the negotiated pixel layout.
+    ///
+    /// # Errors
+    /// Returns [`BackendError::InvalidConfiguration`] if multiplication would
+    /// overflow the bounded representation.
+    pub fn max_frame_bytes(self) -> Result<usize, BackendError> {
+        self.validate()?;
+        let pixels = usize::from(self.width)
+            .checked_mul(usize::from(self.height))
+            .ok_or(BackendError::InvalidConfiguration)?;
+        let bytes = match self.pixel_format {
+            PixelFormat::Yuyv | PixelFormat::Mjpeg => pixels.checked_mul(2),
+            PixelFormat::Nv12 => pixels.checked_mul(3).and_then(|value| value.checked_div(2)),
+        };
+        bytes.ok_or(BackendError::InvalidConfiguration)
+    }
+
     /// Validates dimensions and frame rate.
     ///
     /// # Errors
@@ -519,6 +536,8 @@ mod tests {
             formats: vec![PixelFormat::Yuyv, PixelFormat::Nv12],
         };
         assert_eq!(capabilities.negotiate(nv12), Ok(nv12));
+        assert_eq!(requested.max_frame_bytes(), Ok(4_147_200));
+        assert_eq!(nv12.max_frame_bytes(), Ok(3_110_400));
     }
 
     #[test]
