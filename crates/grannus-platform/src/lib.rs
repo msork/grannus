@@ -8,6 +8,52 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::time::Duration;
+#[cfg(target_os = "linux")]
+use v4l::{Device, Format, FourCC, buffer::Type, io::traits::CaptureStream, video::Capture};
+
+/// Captures one bounded frame through a Linux V4L2 MMAP stream.
+///
+/// # Errors
+/// Returns a backend error when opening, negotiating, or dequeuing fails.
+#[cfg(target_os = "linux")]
+pub fn capture_v4l2_mmap_once(
+    path: &str,
+    width: u16,
+    height: u16,
+    pixel_format: PixelFormat,
+) -> Result<CapturedFrame, BackendError> {
+    let device = Device::with_path(path).map_err(|_| BackendError::Unavailable)?;
+    let fourcc = match pixel_format {
+        PixelFormat::Yuyv => FourCC::new(b"YUYV"),
+        PixelFormat::Nv12 => FourCC::new(b"NV12"),
+        PixelFormat::Mjpeg => return Err(BackendError::InvalidConfiguration),
+    };
+    let format = Format::new(u32::from(width), u32::from(height), fourcc);
+    let negotiated = device
+        .set_format(&format)
+        .map_err(|_| BackendError::InvalidConfiguration)?;
+    let mut stream = v4l::io::mmap::Stream::with_buffers(&device, Type::VideoCapture, 4)
+        .map_err(|_| BackendError::DeviceIo)?;
+    let (bytes, metadata) = stream.next().map_err(|_| BackendError::DeviceIo)?;
+    let used = usize::try_from(metadata.bytesused)
+        .map_err(|_| BackendError::DeviceIo)?
+        .min(bytes.len());
+    Ok(CapturedFrame {
+        trace_id: TraceId::new(u64::from(metadata.sequence)),
+        captured_at: MonoTime::from_duration(metadata.timestamp.into()),
+        format: VideoFormat {
+            width: u16::try_from(negotiated.width)
+                .map_err(|_| BackendError::InvalidConfiguration)?,
+            height: u16::try_from(negotiated.height)
+                .map_err(|_| BackendError::InvalidConfiguration)?,
+            fps_numerator: 0,
+            fps_denominator: 1,
+            pixel_format,
+        },
+        sequence: u64::from(metadata.sequence),
+        bytes: bytes[..used].to_vec(),
+    })
+}
 
 /// Capture pixel layout. Backends may extend this capability list later.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -130,6 +176,46 @@ pub struct CapturedFrame {
     /// Owned payload for the fake/reference path. Real zero-copy backends will
     /// expose a capability-tagged buffer handle behind a separate type.
     pub bytes: Vec<u8>,
+}
+
+/// Driver-sequence classification with a monotonic host fallback.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SequenceObservation {
+    pub raw: u32,
+    pub effective: u64,
+    pub discontinuity: bool,
+}
+
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SequenceTracker {
+    previous: Option<u32>,
+    host: u64,
+}
+
+#[allow(missing_docs)]
+impl SequenceTracker {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            previous: None,
+            host: 0,
+        }
+    }
+    pub fn observe(&mut self, raw: u32) -> SequenceObservation {
+        let discontinuity = self
+            .previous
+            .is_some_and(|p| raw <= p || raw.wrapping_sub(p) > 1);
+        let result = SequenceObservation {
+            raw,
+            effective: self.host,
+            discontinuity,
+        };
+        self.previous = Some(raw);
+        self.host = self.host.saturating_add(1);
+        result
+    }
 }
 
 /// Reports whether a capture timestamp regressed relative to the prior frame.
