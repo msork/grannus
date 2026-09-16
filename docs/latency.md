@@ -22,6 +22,19 @@ State host/client hardware, OS/kernel, capture card/firmware/mode, GPU/driver,
 codec settings, display mode, network topology, controller adapter, and build
 commit. An average alone is not an acceptable result.
 
+## M0 telemetry event contract
+
+Each in-process observation carries a non-secret `TraceId`, a `MetricStage`,
+and a `MonoTime` relative to a process-local monotonic epoch. Histogram
+consumers derive stage durations by correlating events with the same trace ID;
+wall-clock time is not used for latency calculations. The initial fake-session
+path emits capture-arrival, input-accepted, and controller-report events.
+
+Metric event storage is bounded. When full, it drops the oldest observation and
+increments a drop counter so slow diagnostics cannot retain stale work or block
+the media/input path. This establishes instrumentation semantics only; it is not
+a hardware latency measurement.
+
 ## Baseline experiments
 
 1. Capture card passthrough vs captured-frame arrival using a millisecond timer.

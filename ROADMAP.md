@@ -10,10 +10,10 @@ hardware evidence; simulation alone cannot complete them.
 - [x] Define a bounded v1 controller-input datagram with round-trip/negative tests.
 - [x] Define backend traits and deterministic fake capture/controller backends.
 - [x] Add a fake-session CLI smoke path.
-- [ ] Add structured configuration loading, schema validation, and safe defaults.
-- [ ] Add monotonic stage timestamps, histogram-ready metric events, and trace IDs.
-- [ ] Add slot lease/ownership state machine with reconnect/conflict tests.
-- [ ] Add stale/duplicate/wrapping sequence-window property tests.
+- [x] Add structured configuration loading, schema validation, and safe defaults.
+- [x] Add monotonic stage timestamps, histogram-ready metric events, and trace IDs.
+- [x] Add slot lease/ownership state machine with reconnect/conflict tests.
+- [x] Add stale/duplicate/wrapping sequence-window property tests.
 - [ ] Add fuzz targets for every untrusted decoder.
 - [ ] Add graceful lifecycle and signal-driven shutdown.
 

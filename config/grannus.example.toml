@@ -1,4 +1,4 @@
-# Illustrative only. Structured config loading is an unchecked M0 task.
+# Validated host configuration. All network-exposure and pairing features remain disabled in M0.
 
 [host]
 name = "grannus"

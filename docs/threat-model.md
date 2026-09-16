@@ -44,6 +44,17 @@ data. Native/vendor APIs are memory-safety and availability boundaries.
 6. Media reliability cannot block newer controller input.
 7. NAT traversal cannot silently weaken authentication.
 
+## M0 slot-lease model
+
+The M0 `SlotManager` is a fixed-capacity, in-process ownership state machine.
+It accepts an opaque identity only after a future session layer authenticates
+that identity; it does not implement authentication itself. An identity may own
+one slot. A disconnect moves its lease to reconnect grace, where input is
+rejected and only the same identity can reactivate it. A different identity
+continues to receive a conflict until lifecycle code expires the disconnected
+lease. Active leases cannot be expired, and owner-only release/authorization
+checks prevent silent slot takeover.
+
 ## Out of scope for pre-alpha
 
 Internet exposure, relay operation, multi-tenant hosting, and hostile local root

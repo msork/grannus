@@ -2,13 +2,20 @@
 
 #![forbid(unsafe_code)]
 
-use grannus_core::{Button, Buttons, ControllerState, PlayerSlot};
+mod config;
+
+use config::Config;
+use grannus_core::{
+    Button, Buttons, ClientIdentity, ControllerState, MetricEvent, MetricEventBuffer, MetricStage,
+    MonoClock, PlayerSlot, SequenceDecision, SequenceWindow, SlotManager, TraceId,
+};
 use grannus_platform::{
     CaptureBackend, ControllerBackend, FakeCapture, FakeController, PixelFormat, VideoFormat,
 };
 use grannus_protocol::{InputDatagram, decode_input_v1, encode_input_v1};
 use std::env;
 use std::error::Error;
+use std::num::NonZeroUsize;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -24,10 +31,14 @@ fn main() -> ExitCode {
 fn run(mut arguments: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
     match arguments.next().as_deref() {
         Some("doctor") => {
-            doctor();
+            let config = load_config(arguments)?;
+            doctor(&config);
             Ok(())
         }
-        Some("fake-session") => fake_session(),
+        Some("fake-session") => {
+            load_config(arguments)?;
+            fake_session()
+        }
         Some("help" | "--help" | "-h") | None => {
             print_help();
             Ok(())
@@ -36,16 +47,35 @@ fn run(mut arguments: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>
     }
 }
 
-fn doctor() {
+fn load_config(mut arguments: impl Iterator<Item = String>) -> Result<Config, Box<dyn Error>> {
+    match arguments.next().as_deref() {
+        None => Ok(Config::default()),
+        Some("--config") => {
+            let path = arguments.next().ok_or("--config requires a path")?;
+            if arguments.next().is_some() {
+                return Err("unexpected argument after configuration path".into());
+            }
+            Ok(Config::load(path)?)
+        }
+        Some(other) => {
+            Err(format!("unexpected argument {other:?}; expected --config <PATH>").into())
+        }
+    }
+}
+
+fn doctor(config: &Config) {
     println!("Grannus {}", env!("CARGO_PKG_VERSION"));
     println!("target_os={}", env::consts::OS);
     println!("target_arch={}", env::consts::ARCH);
     println!("hardware_backends=not-built");
     println!("network_listeners=none");
+    println!("config_listen={}", config.host.listen);
     println!("status=foundation-only");
 }
 
 fn fake_session() -> Result<(), Box<dyn Error>> {
+    let clock = MonoClock::new();
+    let mut metric_events = MetricEventBuffer::new(NonZeroUsize::new(16).unwrap());
     let format = VideoFormat {
         width: 1_920,
         height: 1_080,
@@ -55,7 +85,12 @@ fn fake_session() -> Result<(), Box<dyn Error>> {
     };
     let mut capture = FakeCapture::new(format, 3)?;
     let mut frame_count = 0_u64;
-    while capture.next_frame().is_ok() {
+    while let Ok(frame) = capture.next_frame() {
+        metric_events.record(MetricEvent::new(
+            frame.trace_id,
+            MetricStage::CaptureArrival,
+            frame.captured_at,
+        ));
         frame_count += 1;
     }
 
@@ -70,13 +105,44 @@ fn fake_session() -> Result<(), Box<dyn Error>> {
         state,
     };
     let decoded = decode_input_v1(&encode_input_v1(&input))?;
+    let mut sequences = SequenceWindow::new();
+    if sequences.observe(decoded.sequence) != SequenceDecision::Accepted {
+        return Err("initial fake input sequence was not accepted".into());
+    }
+    let input_identity = ClientIdentity::new(1);
+    let mut slots = SlotManager::new();
+    slots.claim(decoded.player_slot, input_identity)?;
+    slots.authorize(decoded.player_slot, input_identity)?;
+    let input_trace = TraceId::new(u64::MAX);
+    metric_events.record(MetricEvent::new(
+        input_trace,
+        MetricStage::InputAccepted,
+        clock.now(),
+    ));
     let mut controller = FakeController::default();
     controller.send_state(decoded.state)?;
+    metric_events.record(MetricEvent::new(
+        input_trace,
+        MetricStage::ControllerReport,
+        clock.now(),
+    ));
     controller.neutralize()?;
+    metric_events.record(MetricEvent::new(
+        input_trace,
+        MetricStage::ControllerReport,
+        clock.now(),
+    ));
 
     println!("fake_session_frames={frame_count}");
     println!("fake_controller_reports={}", controller.reports());
-    println!("final_state_neutral={}", controller.latest() == Some(ControllerState::default()));
+    println!("input_slot_authorized=true");
+    println!("input_sequence_accepted=true");
+    println!("metric_events={}", metric_events.events().len());
+    println!("metric_events_dropped={}", metric_events.dropped_events());
+    println!(
+        "final_state_neutral={}",
+        controller.latest() == Some(ControllerState::default())
+    );
     println!("status=ok");
     Ok(())
 }
@@ -88,8 +154,12 @@ fn print_help() {
     println!("    grannus-host <COMMAND>");
     println!();
     println!("COMMANDS:");
-    println!("    doctor        Report safe foundation/backend status");
-    println!("    fake-session  Exercise deterministic fake capture and input paths");
+    println!(
+        "    doctor [--config PATH]        Validate config and report safe foundation/backend status"
+    );
+    println!(
+        "    fake-session [--config PATH]  Validate config and exercise deterministic fake paths"
+    );
     println!("    help          Show this help");
 }
 
@@ -106,5 +176,10 @@ mod tests {
     #[test]
     fn unknown_command_fails() {
         assert!(run(["serve".to_owned()].into_iter()).is_err());
+    }
+
+    #[test]
+    fn configuration_flag_requires_a_path() {
+        assert!(run(["doctor".to_owned(), "--config".to_owned()].into_iter()).is_err());
     }
 }

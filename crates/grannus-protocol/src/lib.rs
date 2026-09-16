@@ -48,7 +48,9 @@ impl fmt::Display for DecodeError {
         match self {
             Self::InvalidLength(value) => write!(formatter, "invalid datagram length: {value}"),
             Self::InvalidMagic => formatter.write_str("invalid input datagram magic"),
-            Self::UnsupportedVersion(value) => write!(formatter, "unsupported input version: {value}"),
+            Self::UnsupportedVersion(value) => {
+                write!(formatter, "unsupported input version: {value}")
+            }
             Self::InvalidFlags(value) => write!(formatter, "invalid input flags: {value:#x}"),
             Self::ReservedNonZero => formatter.write_str("reserved input bytes are nonzero"),
             Self::InvalidPlayerSlot(value) => write!(formatter, "invalid player slot: {value}"),
@@ -60,6 +62,7 @@ impl fmt::Display for DecodeError {
 impl std::error::Error for DecodeError {}
 
 /// Encodes the fixed-size v1 datagram in network byte order.
+#[must_use]
 pub fn encode_input_v1(input: &InputDatagram) -> [u8; INPUT_DATAGRAM_V1_LEN] {
     let mut bytes = [0_u8; INPUT_DATAGRAM_V1_LEN];
     bytes[0..2].copy_from_slice(&MAGIC);
@@ -104,8 +107,8 @@ pub fn decode_input_v1(bytes: &[u8]) -> Result<InputDatagram, DecodeError> {
 
     let slot = PlayerSlot::new(bytes[16]).map_err(|_| DecodeError::InvalidPlayerSlot(bytes[16]))?;
     let button_bits = read_u32(bytes, 17);
-    let buttons = Buttons::from_bits(button_bits)
-        .map_err(|_| DecodeError::InvalidButtonBits(button_bits))?;
+    let buttons =
+        Buttons::from_bits(button_bits).map_err(|_| DecodeError::InvalidButtonBits(button_bits))?;
 
     Ok(InputDatagram {
         sequence: read_u32(bytes, 4),
@@ -113,8 +116,14 @@ pub fn decode_input_v1(bytes: &[u8]) -> Result<InputDatagram, DecodeError> {
         player_slot: slot,
         state: ControllerState {
             buttons,
-            left_stick: [Axis::new(read_i16(bytes, 21)), Axis::new(read_i16(bytes, 23))],
-            right_stick: [Axis::new(read_i16(bytes, 25)), Axis::new(read_i16(bytes, 27))],
+            left_stick: [
+                Axis::new(read_i16(bytes, 21)),
+                Axis::new(read_i16(bytes, 23)),
+            ],
+            right_stick: [
+                Axis::new(read_i16(bytes, 25)),
+                Axis::new(read_i16(bytes, 27)),
+            ],
             left_trigger: Trigger::new(read_u16(bytes, 29)),
             right_trigger: Trigger::new(read_u16(bytes, 31)),
             gyro: read_vector(bytes, 33),
@@ -147,11 +156,19 @@ fn read_u16(bytes: &[u8], offset: usize) -> u16 {
 }
 
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_be_bytes(bytes[offset..offset + 4].try_into().expect("validated fixed length"))
+    u32::from_be_bytes(
+        bytes[offset..offset + 4]
+            .try_into()
+            .expect("validated fixed length"),
+    )
 }
 
 fn read_u64(bytes: &[u8], offset: usize) -> u64 {
-    u64::from_be_bytes(bytes[offset..offset + 8].try_into().expect("validated fixed length"))
+    u64::from_be_bytes(
+        bytes[offset..offset + 8]
+            .try_into()
+            .expect("validated fixed length"),
+    )
 }
 
 fn read_vector(bytes: &[u8], offset: usize) -> Vector3 {
@@ -173,7 +190,9 @@ mod tests {
             source_time_us: 1_234_567,
             player_slot: PlayerSlot::new(2).unwrap(),
             state: ControllerState {
-                buttons: Buttons::default().with(Button::South, true).with(Button::Home, true),
+                buttons: Buttons::default()
+                    .with(Button::South, true)
+                    .with(Button::Home, true),
                 left_stick: [Axis::new(i16::MIN), Axis::new(i16::MAX)],
                 right_stick: [Axis::new(-123), Axis::new(456)],
                 left_trigger: Trigger::new(12_345),
@@ -194,10 +213,13 @@ mod tests {
     #[test]
     fn rejects_wrong_sizes_without_panicking() {
         for length in 0..INPUT_DATAGRAM_V1_LEN {
-            assert_eq!(decode_input_v1(&vec![0; length]), Err(DecodeError::InvalidLength(length)));
+            assert_eq!(
+                decode_input_v1(&vec![0; length]),
+                Err(DecodeError::InvalidLength(length))
+            );
         }
         assert_eq!(
-            decode_input_v1(&vec![0; INPUT_DATAGRAM_V1_LEN + 1]),
+            decode_input_v1(&[0; INPUT_DATAGRAM_V1_LEN + 1]),
             Err(DecodeError::InvalidLength(INPUT_DATAGRAM_V1_LEN + 1))
         );
     }
@@ -213,6 +235,9 @@ mod tests {
     fn rejects_unknown_buttons() {
         let mut bytes = encode_input_v1(&sample());
         bytes[17..21].copy_from_slice(&(1_u32 << 31).to_be_bytes());
-        assert_eq!(decode_input_v1(&bytes), Err(DecodeError::InvalidButtonBits(1 << 31)));
+        assert_eq!(
+            decode_input_v1(&bytes),
+            Err(DecodeError::InvalidButtonBits(1 << 31))
+        );
     }
 }

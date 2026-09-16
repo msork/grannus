@@ -2,25 +2,10 @@
 
 #![forbid(unsafe_code)]
 
-use grannus_core::ControllerState;
+pub use grannus_core::MonoTime;
+use grannus_core::{ControllerState, TraceId};
 use std::fmt;
 use std::time::Duration;
-
-/// Monotonic timestamp relative to a process-local epoch.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct MonoTime(Duration);
-
-impl MonoTime {
-    /// Constructs a process-relative timestamp.
-    pub const fn from_duration(duration: Duration) -> Self {
-        Self(duration)
-    }
-
-    /// Returns the process-relative duration.
-    pub const fn duration(self) -> Duration {
-        self.0
-    }
-}
 
 /// Capture pixel layout. Backends may extend this capability list later.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,6 +54,8 @@ impl VideoFormat {
 /// Captured frame metadata and payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapturedFrame {
+    /// Non-secret trace identifier for correlating pipeline stage events.
+    pub trace_id: TraceId,
     /// Monotonic capture-arrival time.
     pub captured_at: MonoTime,
     /// Negotiated format.
@@ -172,6 +159,7 @@ impl CaptureBackend for FakeCapture {
         self.sequence = self.sequence.wrapping_add(1);
         self.remaining -= 1;
         Ok(CapturedFrame {
+            trace_id: TraceId::new(sequence),
             captured_at: MonoTime::from_duration(Duration::from_micros(
                 sequence.saturating_mul(16_667),
             )),
@@ -191,11 +179,13 @@ pub struct FakeController {
 
 impl FakeController {
     /// Returns the newest accepted state.
+    #[must_use]
     pub const fn latest(&self) -> Option<ControllerState> {
         self.latest
     }
 
     /// Returns the number of emitted reports.
+    #[must_use]
     pub const fn reports(&self) -> u64 {
         self.reports
     }

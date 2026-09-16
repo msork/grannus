@@ -49,10 +49,15 @@ capture 15, digital triggers 16–17. Bits 18–31 are zero in v1.
 
 ### Sequence ordering
 
-M0 must define and property-test the wrapping comparison window before live
-network use. Duplicate or older snapshots are dropped. After an authenticated
-session restart, sequence state resets through explicit session lifecycle, not
-through an unauthenticated packet.
+The v1 receiver retains one newest accepted sequence per authenticated input
+source. A candidate is newer when its wrapping forward distance from that
+sequence is in `1..2^31`. Equal candidates are duplicates; backward candidates
+and the exact half-range distance (`2^31`) are rejected as stale because that
+distance has no unambiguous ordering. An accepted candidate replaces the one
+stored sequence, so state is bounded and loss does not block a later snapshot.
+
+After an authenticated session restart, sequence state resets through explicit
+session lifecycle, not through an unauthenticated packet.
 
 ### Staleness
 

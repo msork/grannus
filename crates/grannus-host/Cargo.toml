@@ -11,6 +11,8 @@ rust-version.workspace = true
 grannus-core = { path = "../grannus-core" }
 grannus-platform = { path = "../grannus-platform" }
 grannus-protocol = { path = "../grannus-protocol" }
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.6"
 
 [lints]
 workspace = true
