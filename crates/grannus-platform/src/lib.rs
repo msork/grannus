@@ -115,6 +115,12 @@ pub struct CapturedFrame {
     pub bytes: Vec<u8>,
 }
 
+/// Reports whether a capture timestamp regressed relative to the prior frame.
+#[must_use]
+pub fn timestamp_discontinuity(previous: Option<MonoTime>, current: MonoTime) -> bool {
+    previous.is_some_and(|prior| current < prior)
+}
+
 /// Generic backend failure without leaking a vendor API into core layers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendError {
@@ -510,5 +516,15 @@ mod tests {
             oversized.validate(),
             Err(BackendError::InvalidConfiguration)
         );
+    }
+
+    #[test]
+    fn capture_timestamp_discontinuity_detects_regression_only() {
+        let first = MonoTime::from_duration(Duration::from_millis(10));
+        let later = MonoTime::from_duration(Duration::from_millis(20));
+        assert!(!timestamp_discontinuity(None, first));
+        assert!(!timestamp_discontinuity(Some(first), later));
+        assert!(!timestamp_discontinuity(Some(first), first));
+        assert!(timestamp_discontinuity(Some(later), first));
     }
 }
