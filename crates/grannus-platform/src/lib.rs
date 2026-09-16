@@ -35,6 +35,29 @@ pub struct VideoFormat {
     pub pixel_format: PixelFormat,
 }
 
+/// Capabilities reported by a V4L2 device before buffer allocation.
+#[allow(missing_docs)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct V4l2Capabilities {
+    pub streaming: bool,
+    pub formats: Vec<PixelFormat>,
+}
+
+impl V4l2Capabilities {
+    /// Selects a requested format only when the device advertises it.
+    ///
+    /// # Errors
+    /// Returns [`BackendError::Unavailable`] when streaming or the pixel format
+    /// is unsupported.
+    pub fn negotiate(&self, requested: VideoFormat) -> Result<VideoFormat, BackendError> {
+        let requested = requested.validate()?;
+        if !self.streaming || !self.formats.contains(&requested.pixel_format) {
+            return Err(BackendError::Unavailable);
+        }
+        Ok(requested)
+    }
+}
+
 impl VideoFormat {
     /// Validates dimensions and frame rate.
     ///
@@ -420,5 +443,23 @@ mod tests {
         assert_eq!(transport.delivered().len(), 1);
         transport.reconnect();
         assert!(transport.delivered().is_empty());
+    }
+
+    #[test]
+    fn v4l2_capabilities_fail_closed_before_allocation() {
+        let requested = format();
+        let capabilities = V4l2Capabilities {
+            streaming: true,
+            formats: vec![PixelFormat::Mjpeg],
+        };
+        assert_eq!(
+            capabilities.negotiate(requested),
+            Err(BackendError::Unavailable)
+        );
+        let capabilities = V4l2Capabilities {
+            streaming: true,
+            formats: vec![PixelFormat::Yuyv],
+        };
+        assert_eq!(capabilities.negotiate(requested), Ok(requested));
     }
 }
