@@ -121,6 +121,26 @@ pub fn timestamp_discontinuity(previous: Option<MonoTime>, current: MonoTime) ->
     previous.is_some_and(|prior| current < prior)
 }
 
+/// Bounded tracker for capture timestamp continuity across frames.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TimestampTracker {
+    previous: Option<MonoTime>,
+}
+
+impl TimestampTracker {
+    /// Creates an empty tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { previous: None }
+    }
+    /// Records a timestamp and reports whether it regressed.
+    pub fn observe(&mut self, current: MonoTime) -> bool {
+        let discontinuity = timestamp_discontinuity(self.previous, current);
+        self.previous = Some(current);
+        discontinuity
+    }
+}
+
 /// Generic backend failure without leaking a vendor API into core layers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendError {
@@ -526,5 +546,9 @@ mod tests {
         assert!(!timestamp_discontinuity(Some(first), later));
         assert!(!timestamp_discontinuity(Some(first), first));
         assert!(timestamp_discontinuity(Some(later), first));
+        let mut tracker = TimestampTracker::new();
+        assert!(!tracker.observe(first));
+        assert!(!tracker.observe(later));
+        assert!(tracker.observe(first));
     }
 }
